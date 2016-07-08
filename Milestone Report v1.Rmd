@@ -1,0 +1,213 @@
+---
+title: "Data Science Specialization Capstone Project"
+subtitle: "Milestone Report"
+author: "Shaun Wesley Que"
+date: 
+output: html_document
+---
+
+# Task 0: Understanding the Problem
+
+In this capstone project, we will be applying data science in the area of natural language processing (NLP). The datasets comes from [HC corpora](http://www.corpora.heliohost.org/), which is a collection of corpora for various languages. The files have been filtered based on languages, but may still contain some foreign text. The dataset can be downloaded from the Coursera Data Science Specialization [Capstone Page](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip).
+
+First, a large corpus of text documents will be analysed to discover the data structure. It will be followed with a series of data processing steps (e.g. removing punctuations, numbers, stopwords, profanities). Next, the datasets will be samples to build a predictive text model. Eventually, a predictive text product will be built.
+
+# Task 1: Data Acquisition and Cleaning
+The data are provided in various languages (English, French, German, Finnish) and comes from different data sources (blogs, news, twitter). Only the english context will be analyzed. The list of profanity can be downloaded from this [Free Web Headers Site](http://www.freewebheaders.com/wordpress/wp-content/uploads/full-list-of-bad-words-banned-by-google-txt-file.zip).
+
+```{r}
+setwd("C:/Users/shaun.que/Desktop/DS/Capstone/final/en_US")
+
+# Read datasets
+data.blogs   <- read.table("en_US.blogs.txt", header=FALSE, sep="\n", 
+                           quote="", stringsAsFactors=FALSE)
+data.news    <- read.table("en_US.news.txt", header=FALSE, sep="\n", 
+                           quote="", stringsAsFactors=FALSE)
+data.twitter <- read.table("en_US.twitter.txt", header=FALSE, sep="\n", 
+                           quote="", stringsAsFactors=FALSE)
+
+nrow.data.blogs   <- nrow(data.blogs)
+nrow.data.news    <- nrow(data.news)
+nrow.data.twitter <- nrow(data.twitter)
+
+data.frame(blogs=nrow.data.blogs, news=nrow.data.news, twitter=nrow.data.twitter, row.names=NULL)
+
+# Preview datasets
+head(data.blogs, n=3)
+head(data.news, n=3)
+head(data.twitter, n=3)
+
+# Read profanities 
+data.profanity <- read.table("en_US.profanity.txt", header=FALSE, sep="\n", 
+                           quote="", stringsAsFactors=FALSE)
+nrow(data.profanity)
+```
+
+
+# Task 2: Exploratory Data Analysis
+The datasets are analyzed to obtain the general statistics (word counts, line counts). Histograms are plotted for the word counts for the different data sources. It can be seen that blog data have the largest (word count per line) spread . Tweets (Twitter) have much smaller spread.
+```{r warning=FALSE, message=FALSE}
+library(stringi)
+library(ggplot2)
+```
+```{r}
+# Get general text statistics 
+stri_stats_general(data.blogs$V1)
+stri_stats_general(data.news$V1)
+stri_stats_general(data.twitter$V1)
+
+# Get summary of word counts
+counts.blogs <- unlist(stri_count_words(data.blogs$V1))
+counts.news <- unlist(stri_count_words(data.news$V1))
+counts.twitter <- unlist(stri_count_words(data.twitter$V1))
+
+summary(counts.blogs)
+summary(counts.news)
+summary(counts.twitter)
+
+# Plot histograms of word counts
+ggplot(as.data.frame(counts.blogs), aes(x=counts.blogs)) + 
+  geom_histogram(binwidth=200, fill="steelblue", color="black") + 
+  labs(x="Word counts per entry", y="Frequency (log10)", title="Histogram of word counts for blogs") +  
+  scale_y_log10()
+
+ggplot(as.data.frame(counts.news), aes(x=counts.news)) + 
+  geom_histogram(binwidth=40, fill="steelblue", color="black") + 
+  labs(x="Word counts per entry", y="Frequency", title="Histogram of word counts for news")
+
+ggplot(as.data.frame(counts.twitter), aes(x=counts.twitter)) + 
+  geom_histogram(binwidth=2, fill="steelblue", color="black") + 
+  labs(x="Word counts per entry", y="Frequency", title="Histogram of word counts for twitter")
+```
+
+## Data Preprocessing
+To expedite data processing, each dataset will be sampled (10%). The following language processing step are performed
+
+* removing punctuation
+* removing numbers
+* removing stop words
+* removing profanities
+* stemming words
+* stripping white space
+* converting to lower case
+
+```{r warning=FALSE, message=FALSE}
+library(data.table)
+library(NLP)
+library(tm)
+library(SnowballC)
+```
+```{r}
+getCorpus <- function (data, rm_words) {
+  #build corpus
+  corpus <- Corpus(VectorSource(data))
+  
+  # convert words to lower case
+  corpus  <- tm_map(corpus, content_transformer(tolower))
+  
+  # remove white spaces
+  corpus <- tm_map(corpus, stripWhitespace)
+  
+  # remove punctuation
+  corpus <- tm_map(corpus, removePunctuation)
+  
+  # remove numbers
+  corpus <- tm_map(corpus, removeNumbers)
+  
+  # stem words
+  corpus <- tm_map(corpus, stemDocument)
+  
+  # remove stopwords
+  corpus <- tm_map(corpus, removeWords, rm_words)
+  
+  return (corpus)  
+}
+
+# Set seed
+set.seed(323)
+
+sample.pct <- .25
+sample.data.blogs <- as.data.frame(data.blogs[sample(nrow.data.blogs, sample.pct * nrow.data.blogs),])
+sample.data.news <- as.data.frame(data.blogs[sample(nrow.data.news, sample.pct * nrow.data.news),])
+sample.data.twitter <- as.data.frame(data.blogs[sample(nrow.data.twitter, sample.pct * nrow.data.twitter),])
+
+sample.data.blogs[,1] <- as.character(sample.data.blogs[,1])
+sample.data.news[,1] <- as.character(sample.data.news[,1])
+sample.data.twitter[,1] <- as.character(sample.data.twitter[,1])
+
+nrow.sample.data.blogs <- nrow(sample.data.blogs)
+nrow.sample.data.news <- nrow(sample.data.news)
+nrow.sample.data.twitter <- nrow(sample.data.twitter)
+
+nrow.data.blogs   <- nrow(data.blogs)
+nrow.data.news    <- nrow(data.news)
+nrow.data.twitter <- nrow(data.twitter)
+
+data.frame(sample.blogs=nrow.sample.data.blogs, 
+           sample.news=nrow.sample.data.news, 
+           sample.twitter=nrow.sample.data.twitter, 
+           row.names=NULL)
+
+corpus.blogs <- getCorpus(sample.data.blogs, c(stopwords('english'), data.profanity$V1))
+corpus.news <- getCorpus(sample.data.news, c(stopwords('english'), data.profanity$V1))
+corpus.twitter <- getCorpus(sample.data.twitter, c(stopwords('english'), data.profanity$V1))
+
+# corpus.blogs <- getCorpus(data.blogs, c(stopwords('english'), data.profanity$V1))
+# corpus.news <- getCorpus(data.news, c(stopwords('english'), data.profanity$V1))
+# corpus.twitter <- getCorpus(data.twitter, c(stopwords('english'), data.profanity$V1))
+```
+
+### Tokenization
+Uni-grams, bi-grams and tri-grams are generated for each data source. Sparse terms will be removed. The top 20 unigrams will be plotted. The top bigrams are illustrated using word clouds.
+
+```{r warning=FALSE, message=FALSE}
+library(rJava)
+library(RWeka)
+library(wordcloud)
+```
+```{r}
+getNGrams <- function(corpus, size, pct) {
+  tokenizer <- function(x) NGramTokenizer(x, Weka_control(min = size, max = size))
+  
+  tdm <- TermDocumentMatrix(corpus, control = list(tokenize = tokenizer))
+  
+  # remove sparse terms
+  tdm <- removeSparseTerms(tdm, pct)
+  
+  # aggregate term frequencies
+  tf <- sort(rowSums(as.matrix(tdm)), decreasing=TRUE)
+  
+  return(data.frame(term=names(tf), frequency=tf))
+}
+
+# Get unigrams
+unigram.blogs <- getNGrams(corpus.blogs, 1, 0.99)
+unigram.news <- getNGrams(corpus.news, 1, 0.99)
+unigram.twitter <- getNGrams(corpus.twitter, 1, 0.99)
+
+# Get bigrams
+bigram.blogs <- getNGrams(corpus.blogs, 2, 0.999)
+bigram.news <- getNGrams(corpus.news, 2, 0.999)
+bigram.twitter <- getNGrams(corpus.twitter, 2, 0.999)
+
+# Get trigrams
+trigram.blogs <- getNGrams(corpus.blogs, 3, 0.9999)
+trigram.news <- getNGrams(corpus.news, 3, 0.9999)
+trigram.twitter <- getNGrams(corpus.twitter, 3, 0.9999)
+
+# Plot top trigrams
+ggplot(trigram.blogs[1:20,], aes(x=reorder(term, frequency), y=frequency, fill=frequency)) + geom_bar(stat="identity") +
+  labs(x="Term", y="Frequency", title="Top 20 trigrams for blogs") + coord_flip()
+
+ggplot(trigram.news[1:20,], aes(x=reorder(term, frequency), y=frequency, fill=frequency)) +
+    geom_bar(stat="identity") + 
+    labs(x="Term", y="Frequency", title="Top 20 trigrams for news") + coord_flip()
+
+# Plot bigram word clouds
+suppressWarnings(wordcloud(bigram.blogs$term, bigram.blogs$frequency, min.freq=5, max.words=50, 
+                          scale=c(0.1, 6), colors=brewer.pal(8,"Dark2")))
+
+suppressWarnings(wordcloud(bigram.twitter$term, bigram.twitter$frequency, min.freq=5, max.words=50, 
+                          scale=c(0.1, 6), colors=brewer.pal(10,"Dark2")))
+```
+
